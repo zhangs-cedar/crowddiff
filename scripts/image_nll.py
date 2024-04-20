@@ -25,12 +25,8 @@ def main():
     logger.configure()
 
     logger.log("creating model and diffusion...")
-    model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys())
-    )
-    model.load_state_dict(
-        dist_util.load_state_dict(args.model_path, map_location="cpu")
-    )
+    model, diffusion = create_model_and_diffusion(**args_to_dict(args, model_and_diffusion_defaults().keys()))
+    model.load_state_dict(dist_util.load_state_dict(args.model_path, map_location="cpu"))
     model.to(dist_util.dev())
     model.eval()
 
@@ -55,9 +51,7 @@ def run_bpd_evaluation(model, diffusion, data, num_samples, clip_denoised):
         batch, model_kwargs = next(data)
         batch = batch.to(dist_util.dev())
         model_kwargs = {k: v.to(dist_util.dev()) for k, v in model_kwargs.items()}
-        minibatch_metrics = diffusion.calc_bpd_loop(
-            model, batch, clip_denoised=clip_denoised, model_kwargs=model_kwargs
-        )
+        minibatch_metrics = diffusion.calc_bpd_loop(model, batch, clip_denoised=clip_denoised, model_kwargs=model_kwargs)
 
         for key, term_list in all_metrics.items():
             terms = minibatch_metrics[key].mean(dim=0) / dist.get_world_size()
@@ -83,9 +77,7 @@ def run_bpd_evaluation(model, diffusion, data, num_samples, clip_denoised):
 
 
 def create_argparser():
-    defaults = dict(
-        data_dir="", clip_denoised=True, num_samples=1000, batch_size=1, model_path=""
-    )
+    defaults = dict(data_dir="", clip_denoised=True, num_samples=1000, batch_size=1, model_path="")
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)

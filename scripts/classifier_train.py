@@ -32,34 +32,22 @@ def main():
     logger.configure()
 
     logger.log("creating model and diffusion...")
-    model, diffusion = create_classifier_and_diffusion(
-        **args_to_dict(args, classifier_and_diffusion_defaults().keys())
-    )
+    model, diffusion = create_classifier_and_diffusion(**args_to_dict(args, classifier_and_diffusion_defaults().keys()))
     model.to(dist_util.dev())
     if args.noised:
-        schedule_sampler = create_named_schedule_sampler(
-            args.schedule_sampler, diffusion
-        )
+        schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
 
     resume_step = 0
     if args.resume_checkpoint:
         resume_step = parse_resume_step_from_filename(args.resume_checkpoint)
         if dist.get_rank() == 0:
-            logger.log(
-                f"loading model from checkpoint: {args.resume_checkpoint}... at {resume_step} step"
-            )
-            model.load_state_dict(
-                dist_util.load_state_dict(
-                    args.resume_checkpoint, map_location=dist_util.dev()
-                )
-            )
+            logger.log(f"loading model from checkpoint: {args.resume_checkpoint}... at {resume_step} step")
+            model.load_state_dict(dist_util.load_state_dict(args.resume_checkpoint, map_location=dist_util.dev()))
 
     # Needed for creating correct EMAs and fp16 parameters.
     dist_util.sync_params(model.parameters())
 
-    mp_trainer = MixedPrecisionTrainer(
-        model=model, use_fp16=args.classifier_use_fp16, initial_lg_loss_scale=16.0
-    )
+    mp_trainer = MixedPrecisionTrainer(model=model, use_fp16=args.classifier_use_fp16, initial_lg_loss_scale=16.0)
 
     model = DDP(
         model,
@@ -91,13 +79,9 @@ def main():
     logger.log(f"creating optimizer...")
     opt = AdamW(mp_trainer.master_params, lr=args.lr, weight_decay=args.weight_decay)
     if args.resume_checkpoint:
-        opt_checkpoint = bf.join(
-            bf.dirname(args.resume_checkpoint), f"opt{resume_step:06}.pt"
-        )
+        opt_checkpoint = bf.join(bf.dirname(args.resume_checkpoint), f"opt{resume_step:06}.pt")
         logger.log(f"loading optimizer state from checkpoint: {opt_checkpoint}")
-        opt.load_state_dict(
-            dist_util.load_state_dict(opt_checkpoint, map_location=dist_util.dev())
-        )
+        opt.load_state_dict(dist_util.load_state_dict(opt_checkpoint, map_location=dist_util.dev()))
 
     logger.log("training classifier model...")
 
@@ -113,20 +97,14 @@ def main():
         else:
             t = th.zeros(batch.shape[0], dtype=th.long, device=dist_util.dev())
 
-        for i, (sub_batch, sub_labels, sub_t) in enumerate(
-            split_microbatches(args.microbatch, batch, labels, t)
-        ):
+        for i, (sub_batch, sub_labels, sub_t) in enumerate(split_microbatches(args.microbatch, batch, labels, t)):
             logits = model(sub_batch, timesteps=sub_t)
             loss = F.cross_entropy(logits, sub_labels, reduction="none")
 
             losses = {}
             losses[f"{prefix}_loss"] = loss.detach()
-            losses[f"{prefix}_acc@1"] = compute_top_k(
-                logits, sub_labels, k=1, reduction="none"
-            )
-            losses[f"{prefix}_acc@5"] = compute_top_k(
-                logits, sub_labels, k=5, reduction="none"
-            )
+            losses[f"{prefix}_acc@1"] = compute_top_k(logits, sub_labels, k=1, reduction="none")
+            losses[f"{prefix}_acc@5"] = compute_top_k(logits, sub_labels, k=5, reduction="none")
             log_loss_dict(diffusion, sub_t, losses)
             del losses
             loss = loss.mean()
@@ -153,11 +131,7 @@ def main():
                     model.train()
         if not step % args.log_interval:
             logger.dumpkvs()
-        if (
-            step
-            and dist.get_rank() == 0
-            and not (step + resume_step) % args.save_interval
-        ):
+        if step and dist.get_rank() == 0 and not (step + resume_step) % args.save_interval:
             logger.log("saving model...")
             save_model(mp_trainer, opt, step + resume_step)
 

@@ -63,13 +63,9 @@ def load_data(
         random_flip=random_flip,
     )
     if deterministic:
-        loader = DataLoader(
-            dataset, batch_size=batch_size, shuffle=False, num_workers=1, drop_last=True
-        )
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1, drop_last=True)
     else:
-        loader = DataLoader(
-            dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=True
-        )
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=True)
     while True:
         yield from loader
 
@@ -113,25 +109,25 @@ class ImageDataset(Dataset):
 
     def __getitem__(self, idx):
         # get the crowd image
-        path = self.local_images[idx]        
-        
+        path = self.local_images[idx]
+
         image = Image.open(path)
-        image = np.array(image.convert('RGB'))
-        image = image.astype(np.float32) / 127.5 - 1        
+        image = np.array(image.convert("RGB"))
+        image = image.astype(np.float32) / 127.5 - 1
 
         # get the density map for the image
-        path = path.replace('train','train_den').replace('jpg','csv')
-        path = path.replace('test','test_den').replace('jpg','csv')
+        path = path.replace("train", "train_den").replace("jpg", "csv")
+        path = path.replace("test", "test_den").replace("jpg", "csv")
 
         csv_density = np.asarray(pd.read_csv(path, header=None).values)
-        count =  np.sum(csv_density)
+        count = np.sum(csv_density)
         count = np.ceil(count) if count > 1 else count
         csv_density = np.stack(np.split(csv_density, len(self.normalizer), -1))
-        csv_density = np.asarray([m/n for m,n in zip(csv_density, self.normalizer)])
-        csv_density = csv_density.transpose(1,2,0)
+        csv_density = np.asarray([m / n for m, n in zip(csv_density, self.normalizer)])
+        csv_density = csv_density.transpose(1, 2, 0)
 
-        csv_density = csv_density.clip(0,1)
-        csv_density = 2*csv_density - 1
+        csv_density = csv_density.clip(0, 1)
+        csv_density = 2 * csv_density - 1
         csv_density = csv_density.astype(np.float32)
 
         out_dict = {"count": count.astype(np.float32)}
@@ -145,5 +141,5 @@ def save_images(image, density, path):
     image = np.concatenate([image, density], axis=1)
     image = 127.5 * (image + 1)
 
-    tag = os.path.basename(path).split('.')[0]
-    cv2.imwrite("./results_train/"+tag+'.png', image[:,:,::-1])
+    tag = os.path.basename(path).split(".")[0]
+    cv2.imwrite("./results_train/" + tag + ".png", image[:, :, ::-1])

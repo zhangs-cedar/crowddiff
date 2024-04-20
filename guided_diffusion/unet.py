@@ -34,9 +34,7 @@ class AttentionPool2d(nn.Module):
         output_dim: int = None,
     ):
         super().__init__()
-        self.positional_embedding = nn.Parameter(
-            th.randn(embed_dim, spacial_dim ** 2 + 1) / embed_dim ** 0.5
-        )
+        self.positional_embedding = nn.Parameter(th.randn(embed_dim, spacial_dim**2 + 1) / embed_dim**0.5)
         self.qkv_proj = conv_nd(1, embed_dim, 3 * embed_dim, 1)
         self.c_proj = conv_nd(1, embed_dim, output_dim or embed_dim, 1)
         self.num_heads = embed_dim // num_heads_channels
@@ -102,9 +100,7 @@ class Upsample(nn.Module):
     def forward(self, x):
         assert x.shape[1] == self.channels
         if self.dims == 3:
-            x = F.interpolate(
-                x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest"
-            )
+            x = F.interpolate(x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest")
         else:
             x = F.interpolate(x, scale_factor=2, mode="nearest")
         if self.use_conv:
@@ -130,9 +126,7 @@ class Downsample(nn.Module):
         self.dims = dims
         stride = 2 if dims != 3 else (1, 2, 2)
         if use_conv:
-            self.op = conv_nd(
-                dims, self.channels, self.out_channels, 3, stride=stride, padding=1
-            )
+            self.op = conv_nd(dims, self.channels, self.out_channels, 3, stride=stride, padding=1)
         else:
             assert self.channels == self.out_channels
             self.op = avg_pool_nd(dims, kernel_size=stride, stride=stride)
@@ -209,17 +203,13 @@ class ResBlock(TimestepBlock):
             normalization(self.out_channels),
             nn.SiLU(),
             nn.Dropout(p=dropout),
-            zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)
-            ),
+            zero_module(conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)),
         )
 
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
         elif use_conv:
-            self.skip_connection = conv_nd(
-                dims, channels, self.out_channels, 3, padding=1
-            )
+            self.skip_connection = conv_nd(dims, channels, self.out_channels, 3, padding=1)
         else:
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
 
@@ -231,9 +221,7 @@ class ResBlock(TimestepBlock):
         :param emb: an [N x emb_channels] Tensor of timestep embeddings.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        return checkpoint(
-            self._forward, (x, emb), self.parameters(), self.use_checkpoint
-        )
+        return checkpoint(self._forward, (x, emb), self.parameters(), self.use_checkpoint)
 
     def _forward(self, x, emb):
         if self.updown:
@@ -279,9 +267,7 @@ class AttentionBlock(nn.Module):
         if num_head_channels == -1:
             self.num_heads = num_heads
         else:
-            assert (
-                channels % num_head_channels == 0
-            ), f"q,k,v channels {channels} is not divisible by num_head_channels {num_head_channels}"
+            assert channels % num_head_channels == 0, f"q,k,v channels {channels} is not divisible by num_head_channels {num_head_channels}"
             self.num_heads = channels // num_head_channels
         self.use_checkpoint = use_checkpoint
         self.norm = normalization(channels)
@@ -323,7 +309,7 @@ def count_flops_attn(model, _x, y):
     # We perform two matmuls with the same number of ops.
     # The first computes the weight matrix, the second computes
     # the combination of the value vectors.
-    matmul_ops = 2 * b * (num_spatial ** 2) * c
+    matmul_ops = 2 * b * (num_spatial**2) * c
     model.total_ops += th.DoubleTensor([matmul_ops])
 
 
@@ -348,9 +334,7 @@ class QKVAttentionLegacy(nn.Module):
         ch = width // (3 * self.n_heads)
         q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, length).split(ch, dim=1)
         scale = 1 / math.sqrt(math.sqrt(ch))
-        weight = th.einsum(
-            "bct,bcs->bts", q * scale, k * scale
-        )  # More stable with f16 than dividing afterwards
+        weight = th.einsum("bct,bcs->bts", q * scale, k * scale)  # More stable with f16 than dividing afterwards
         weight = th.softmax(weight.float(), dim=-1).type(weight.dtype)
         a = th.einsum("bts,bcs->bct", weight, v)
         return a.reshape(bs, -1, length)
@@ -478,36 +462,31 @@ class UNetModel(nn.Module):
 
         if self.num_classes is not None:
             self.label_emb = nn.Embedding(num_classes, time_embed_dim)
-        
-
 
         # count decoder parameters
-        
-        self.layer_list = [1,4,7,10,13,17]
+
+        self.layer_list = [1, 4, 7, 10, 13, 17]
         self.average_pool = nn.AdaptiveAvgPool2d(1)
         feat_layers = self.feat_layers = 6
-        linear_nodes = th.tensor([model_channels*mult for mult in channel_mult[-feat_layers:]]).sum()
+        linear_nodes = th.tensor([model_channels * mult for mult in channel_mult[-feat_layers:]]).sum()
         linear_nodes = int(linear_nodes)
         self.count_feat_normalization = nn.LayerNorm(linear_nodes)
         self.linear_nodes = linear_nodes
         # self.count_feat_normalization = normalization(linear_nodes)
         classes = 64
         # linear_nodes = 1536*8*8
-        self.count_decoder = nn.ModuleList([
-                                        #    nn.SiLU(),
-                                           nn.Linear(linear_nodes, classes),
-                                           nn.ReLU(),
-                                        #    nn.Dropout(0.5),
-                                           nn.Linear(classes,1)
-                                           ])
-        
-
-
+        self.count_decoder = nn.ModuleList(
+            [
+                #    nn.SiLU(),
+                nn.Linear(linear_nodes, classes),
+                nn.ReLU(),
+                #    nn.Dropout(0.5),
+                nn.Linear(classes, 1),
+            ]
+        )
 
         ch = input_ch = int(channel_mult[0] * model_channels)
-        self.input_blocks = nn.ModuleList(
-            [TimestepEmbedSequential(conv_nd(dims, in_channels, ch, 3, padding=1))]
-        )
+        self.input_blocks = nn.ModuleList([TimestepEmbedSequential(conv_nd(dims, in_channels, ch, 3, padding=1))])
         self._feature_size = ch
         input_block_chans = [ch]
         ds = 1
@@ -553,9 +532,7 @@ class UNetModel(nn.Module):
                             down=True,
                         )
                         if resblock_updown
-                        else Downsample(
-                            ch, conv_resample, dims=dims, out_channels=out_ch
-                        )
+                        else Downsample(ch, conv_resample, dims=dims, out_channels=out_ch)
                     )
                 )
 
@@ -653,7 +630,6 @@ class UNetModel(nn.Module):
 
         # self.count_decoder.apply(convert_module_to_f16)
 
-
     def convert_to_fp32(self):
         """
         Convert the torso of the model to float32.
@@ -671,9 +647,7 @@ class UNetModel(nn.Module):
         :param y: an [N] Tensor of labels, if class-conditional.
         :return: an [N x C x ...] Tensor of outputs.
         """
-        assert (y is not None) == (
-            self.num_classes is not None
-        ), "must specify y if and only if the model is class-conditional"
+        assert (y is not None) == (self.num_classes is not None), "must specify y if and only if the model is class-conditional"
 
         hs, feats = [], []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
@@ -695,28 +669,28 @@ class UNetModel(nn.Module):
             en_feat = hs[-1].clone()
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb)
-        
+
             if layer in self.layer_list:
                 de_feats.append(h.clone().detach())
                 feats.append(self.average_pool(h))
                 en_feats.append(en_feat.detach())
-        
+
         # test_feats = [feat.clone().detach() for feat in feats]
-        # test_feats = 
+        # test_feats =
         # feats = feats[:self.feat_layers]
         feats = th.cat(feats, axis=1)
 
-        # if th.any(th.isnan(feats)): 
+        # if th.any(th.isnan(feats)):
         #     print('NaN found after averaging.')
         #     assert False
 
-        feats = rearrange(feats, 'b c h w-> b (c h w)')
+        feats = rearrange(feats, "b c h w-> b (c h w)")
         feats = feats.type(x.dtype)
         # if th.any(th.isnan(feats)):
         #     print('NaN found after typecast')
         #     assert False
         feats = self.count_feat_normalization(feats)
-        # if th.any(th.isnan(feats)): 
+        # if th.any(th.isnan(feats)):
         #     print('NaN found after normalization')
         #     assert False
         # count = self.count_decoder(feats)
@@ -726,25 +700,25 @@ class UNetModel(nn.Module):
             feats = module(feats)
 
             # if th.any(th.isnan(feats)):
-                # for feat_old, feat in zip(feats_old,feats):
-                #     if th.any(th.isnan(feat)):
-                #         print(feat)
-                #         print(th.any(th.isnan(feat_old)))
-                # print(f'NaN found after {module} in count decoder') 
-                # assert False
+            # for feat_old, feat in zip(feats_old,feats):
+            #     if th.any(th.isnan(feat)):
+            #         print(feat)
+            #         print(th.any(th.isnan(feat_old)))
+            # print(f'NaN found after {module} in count decoder')
+            # assert False
 
         # count = feats
         # if th.any(th.isnan(count)):
-        #     print('NaN found after count decoder') 
+        #     print('NaN found after count decoder')
         #     print(count)
         #     assert False
-        
+
         # count = 0
 
         h = h.type(x.dtype)
         out = self.out(h)
 
-        return {'out': out, 'count': feats, 'feats': {'en': en_feats, 'de': de_feats}}
+        return {"out": out, "count": feats, "feats": {"en": en_feats, "de": de_feats}}
 
 
 class SuperResModel(UNetModel):
@@ -757,16 +731,16 @@ class SuperResModel(UNetModel):
     def __init__(self, image_size, in_channels, *args, **kwargs):
         """
         初始化函数，用于创建类的实例时初始化对象。
-        
+
         Args:
             image_size (int): 图像大小。
             in_channels (int): 输入通道数。
             *args: 其他位置参数。
             **kwargs: 其他关键字参数。
-        
+
         Returns:
             None
-        
+
         """
         super().__init__(image_size, in_channels * 2, *args, **kwargs)
 
@@ -836,9 +810,7 @@ class EncoderUNetModel(nn.Module):
         )
 
         ch = int(channel_mult[0] * model_channels)
-        self.input_blocks = nn.ModuleList(
-            [TimestepEmbedSequential(conv_nd(dims, in_channels, ch, 3, padding=1))]
-        )
+        self.input_blocks = nn.ModuleList([TimestepEmbedSequential(conv_nd(dims, in_channels, ch, 3, padding=1))])
         self._feature_size = ch
         input_block_chans = [ch]
         ds = 1
@@ -884,9 +856,7 @@ class EncoderUNetModel(nn.Module):
                             down=True,
                         )
                         if resblock_updown
-                        else Downsample(
-                            ch, conv_resample, dims=dims, out_channels=out_ch
-                        )
+                        else Downsample(ch, conv_resample, dims=dims, out_channels=out_ch)
                     )
                 )
                 ch = out_ch
@@ -934,9 +904,7 @@ class EncoderUNetModel(nn.Module):
             self.out = nn.Sequential(
                 normalization(ch),
                 nn.SiLU(),
-                AttentionPool2d(
-                    (image_size // ds), ch, num_head_channels, out_channels
-                ),
+                AttentionPool2d((image_size // ds), ch, num_head_channels, out_channels),
             )
         elif pool == "spatial":
             self.out = nn.Sequential(

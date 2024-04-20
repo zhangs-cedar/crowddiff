@@ -1,12 +1,13 @@
-import sys                                          # System bindings
-import cv2                                          # OpenCV bindings
+import sys  # System bindings
+import cv2  # OpenCV bindings
 import numpy as np
 from PIL import Image
 
-class ColorAnalyser():
+
+class ColorAnalyser:
     def __init__(self, imageLoc):
-        self.src = cv2.imread(imageLoc, 1)          # Reads in image source
-        self.src = self.src[:,256:-256,:]
+        self.src = cv2.imread(imageLoc, 1)  # Reads in image source
+        self.src = self.src[:, 256:-256, :]
         # Empty dictionary container to hold the colour frequencies
         self.colors_count = {}
 
@@ -20,8 +21,7 @@ class ColorAnalyser():
         channel_r = channel_r.flatten()  # ""
 
         for i in range(len(channel_b)):
-            RGB = "(" + str(channel_r[i]) + "," + \
-                str(channel_g[i]) + "," + str(channel_b[i]) + ")"
+            RGB = "(" + str(channel_r[i]) + "," + str(channel_g[i]) + "," + str(channel_b[i]) + ")"
             if RGB in self.colors_count:
                 self.colors_count[RGB] += 1
             else:
@@ -35,14 +35,14 @@ class ColorAnalyser():
             # Prints 'key: value'
             print(keys, ": ", self.colors_count[keys])
 
-        background = int(max(self.colors_count, key=self.colors_count.__getitem__).split(',')[1])
+        background = int(max(self.colors_count, key=self.colors_count.__getitem__).split(",")[1])
         Image.fromarray(self.src).show()
-        self.src = self.src*(self.src>(background+5))
+        self.src = self.src * (self.src > (background + 5))
         Image.fromarray(self.src).show()
 
     def main(self):
         # Checks if an image was actually loaded and errors if it wasn't
-        if (self.src is None):
+        if self.src is None:
             print("No image data. Check image location for typos")
         else:
             # Counts the amount of instances of RGB values within the image
@@ -58,6 +58,6 @@ if __name__ == "__main__":
     # if (len(sys.argv) != 2):
     #     print("error: syntax is 'python main.py /example/image/location.jpg'")
     # else:
-    path = 'experiments/shtech_A/1-7 87 72.36.jpg'
+    path = "experiments/shtech_A/1-7 87 72.36.jpg"
     Analyser = ColorAnalyser(path)
     Analyser.main()
