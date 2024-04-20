@@ -100,6 +100,20 @@ class LossType(enum.Enum):
 
 class GaussianDiffusion:
     """
+    用于训练和采样扩散模型的工具。
+
+    直接移植自此处，并随时间进行适配以进行进一步实验。
+    https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0706c543/diffusion_tf/diffusion_utils_2.py#L42
+
+    :param betas: 一个1-D numpy数组，包含每个扩散时间步的beta值，
+                从T开始，逐渐减少到1。
+    :param model_mean_type: 一个ModelMeanType，确定模型输出的内容。
+    :param model_var_type: 一个ModelVarType，确定方差的输出方式。
+    :param loss_type: 一个LossType，确定使用的损失函数。
+    :param rescale_timesteps: 若为True，则将浮点型时间步长传入模型，
+                            以便它们始终像原始论文中那样进行缩放（0到1000）。
+    """    
+    """
     Utilities for training and sampling diffusion models.
 
     Ported directly from here, and then adapted over time to further experimentation.

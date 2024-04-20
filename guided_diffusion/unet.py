@@ -755,9 +755,25 @@ class SuperResModel(UNetModel):
     """
 
     def __init__(self, image_size, in_channels, *args, **kwargs):
+        """
+        初始化函数，用于创建类的实例时初始化对象。
+        
+        Args:
+            image_size (int): 图像大小。
+            in_channels (int): 输入通道数。
+            *args: 其他位置参数。
+            **kwargs: 其他关键字参数。
+        
+        Returns:
+            None
+        
+        """
         super().__init__(image_size, in_channels * 2, *args, **kwargs)
 
     def forward(self, x, timesteps, low_res=None, **kwargs):
+        """
+        主函数入口，用于创建模型、加载数据、设置训练循环并进行训练。
+        """
         # _, _, new_height, new_width = x.shape
         # upsampled = F.interpolate(low_res, (new_height, new_width), mode="bilinear")
         x = th.cat([x, low_res], dim=1)

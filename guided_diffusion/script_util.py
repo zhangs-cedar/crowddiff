@@ -157,7 +157,8 @@ def create_model(
         else:
             raise ValueError(f"unsupported image size: {image_size}")
     else:
-        channel_mult = tuple(int(ch_mult) for ch_mult in channel_mult.split(","))
+        channel_mult = tuple(int(ch_mult)
+                             for ch_mult in channel_mult.split(","))
 
     attention_ds = []
     for res in attention_resolutions.split(","):
@@ -303,6 +304,38 @@ def sr_create_model_and_diffusion(
     use_fp16,
     pred_channels,
 ):
+    """
+    创建一个用于图像超分辨率的模型和扩散模型。
+
+    Args:
+        large_size (int): 大图的尺寸。
+        small_size (int): 小图的尺寸。
+        class_cond (bool): 是否进行类别条件训练。
+        learn_sigma (bool): 是否学习噪声的标准差。
+        num_channels (int): 输入图像的通道数。
+        num_res_blocks (int): 残差块的数量。
+        num_heads (int): 多头注意力中头的数量。
+        num_head_channels (int): 多头注意力中每个头的通道数。
+        num_heads_upsample (int): 上采样过程中多头注意力的头的数量。
+        attention_resolutions (List[int]): 注意力分辨率列表。
+        dropout (float): dropout的概率。
+        diffusion_steps (int): 扩散模型的步数。
+        noise_schedule (str): 噪声调度策略。
+        timestep_respacing (str): 时间步长的重新排列方式。
+        use_kl (bool): 是否使用KL散度损失。
+        predict_xstart (bool): 是否预测初始值x_start。
+        rescale_timesteps (bool): 是否重新缩放时间步长。
+        rescale_learned_sigmas (bool): 是否重新缩放学到的噪声标准差。
+        use_checkpoint (bool): 是否使用checkpoint技术。
+        use_scale_shift_norm (bool): 是否使用缩放和平移归一化。
+        resblock_updown (bool): 是否在残差块中使用上采样或下采样。
+        use_fp16 (bool): 是否使用16位浮点数进行计算。
+        pred_channels (int): 预测图像的通道数。
+
+    Returns:
+        Tuple[Model, Diffusion]: 一个包含模型对象和扩散模型对象的元组。
+
+    """
     model = sr_create_model(
         large_size,
         small_size,
@@ -352,6 +385,33 @@ def sr_create_model(
     use_fp16,
     pred_channels,
 ):
+    """
+    创建一个 SuperResModel 模型。
+
+    Args:
+        large_size (int): 模型输入图像的大尺寸。
+        small_size (int): 模型输入图像的小尺寸。
+        num_channels (int): 模型的通道数。
+        num_res_blocks (int): 残差块的数量。
+        learn_sigma (bool): 是否学习标准差。
+        class_cond (bool): 是否进行类别条件处理。
+        use_checkpoint (bool): 是否使用检查点。
+        attention_resolutions (str): 注意力分辨率，用逗号分隔的字符串。
+        num_heads (int): 注意力机制的头数。
+        num_head_channels (int): 注意力机制的头通道数。
+        num_heads_upsample (int): 上采样注意力机制的头数。
+        use_scale_shift_norm (bool): 是否使用尺度偏移归一化。
+        dropout (float): dropout率。
+        resblock_updown (bool): 是否在残差块中使用上下采样。
+        use_fp16 (bool): 是否使用fp16精度。
+        pred_channels (int): 预测通道数。
+
+    Returns:
+        SuperResModel: 创建的 SuperResModel 模型。
+
+    Raises:
+        ValueError: 如果 large_size 不为 512、256 或 64。
+    """
     _ = small_size  # hack to prevent unused variable
 
     if large_size == 512:
@@ -366,9 +426,9 @@ def sr_create_model(
     attention_ds = []
     for res in attention_resolutions.split(","):
         attention_ds.append(large_size // int(res))
-    
-    in_channels = pred_channels if pred_channels==3 else 2 # SuperResClass multiplies the in channels by 2
 
+    # SuperResClass multiplies the in channels by 2
+    in_channels = pred_channels if pred_channels == 3 else 2
 
     return SuperResModel(
         image_size=large_size,
@@ -402,6 +462,24 @@ def create_gaussian_diffusion(
     rescale_learned_sigmas=False,
     timestep_respacing="",
 ):
+    """
+    创建一个高斯扩散模型。
+
+    Args:
+        steps (int, optional): 扩散步骤数，默认为1000。
+        learn_sigma (bool, optional): 是否学习sigma，默认为False。
+        sigma_small (bool, optional): 是否使用小的sigma，默认为False。
+        noise_schedule (str, optional): 噪声调度方案，默认为"linear"。
+        use_kl (bool, optional): 是否使用KL散度作为损失函数，默认为False。
+        predict_xstart (bool, optional): 是否预测起始值X，默认为False。
+        rescale_timesteps (bool, optional): 是否重新缩放时间步长，默认为False。
+        rescale_learned_sigmas (bool, optional): 是否重新缩放学习到的sigma，默认为False。
+        timestep_respacing (str, optional): 时间步长重新调整方案，默认为空字符串。
+
+    Returns:
+        SpacedDiffusion: 创建一个SpacedDiffusion对象，包含高斯扩散模型的参数和设置。
+
+    """
     betas = gd.get_named_beta_schedule(noise_schedule, steps)
     if use_kl:
         loss_type = gd.LossType.RESCALED_KL

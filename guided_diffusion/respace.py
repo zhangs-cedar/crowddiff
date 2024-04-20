@@ -70,6 +70,17 @@ class SpacedDiffusion(GaussianDiffusion):
     """
 
     def __init__(self, use_timesteps, **kwargs):
+        """
+        初始化函数，用于创建一个使用指定时间步长的扩散模型。
+        
+        Args:
+            use_timesteps (set): 包含所需时间步长的集合。
+            **kwargs: 其他传递给基础扩散模型的参数。
+        
+        Returns:
+            None
+        
+        """
         self.use_timesteps = set(use_timesteps)
         self.timestep_map = []
         self.original_num_steps = len(kwargs["betas"])
