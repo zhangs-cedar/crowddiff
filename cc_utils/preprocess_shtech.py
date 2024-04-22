@@ -1,5 +1,6 @@
 import torch
 import os
+import cv2
 import glob
 import argparse
 
@@ -12,41 +13,21 @@ from scipy.io import loadmat
 from scipy.ndimage import gaussian_filter
 from einops import rearrange
 
-import cv2
+from cedar.utils import Config
 
-
-def get_arg_parser():
-    parser = argparse.ArgumentParser("Prepare image and density datasets", add_help=False)
-
-    # Datasets path
-    parser.add_argument("--dataset", default="shtech_A")
-    parser.add_argument("--data_dir", default="primary_datasets/", type=str, help="Path to the original dataset")
-    parser.add_argument("--mode", default="train", type=str, help="Indicate train or test folders")
-
-    # Output path
-    parser.add_argument("--output_dir", default="datasets/intermediate", type=str, help="Path to save the results")
-
-    # Gaussian kernel size and kernel variance
-    parser.add_argument("--kernel_size", default="", type=str, help="Size of the Gaussian kernel")
-    parser.add_argument("--sigma", default="", type=str, help="Variance of the Gaussian kernel")
-
-    # Crop image parameters
-    parser.add_argument("--image_size", default=256, type=int, help="Size of the crop images")
-
-    # Device parameter
-    parser.add_argument("--ndevices", default=4, type=int)
-
-    # Image output
-    parser.add_argument("--with_density", action="store_true")
-
-    # count bound
-    parser.add_argument("--lower_bound", default=0, type=int)
-    parser.add_argument("--upper_bound", default=np.Inf, type=int)
-
-    return parser
 
 
 def main(args):
+    """
+    对输入的图像进行人群计数，并将结果输出到指定目录。
+
+    Args:
+        args: 包含各种参数的命名空间对象。
+
+    Returns:
+        无返回值，但会将结果输出到指定目录。
+
+    """
 
     # dataset directiors
     data_dir = os.path.join(args.data_dir, args.dataset)
@@ -54,11 +35,7 @@ def main(args):
 
     # output directory
     output_dir = os.path.join(args.output_dir, args.dataset)
-
-    try:
-        os.mkdir(output_dir)
-    except FileExistsError:
-        pass
+    os.makedirs(output_dir, exist_ok=True)
 
     # density kernel parameters
     kernel_size_list, sigma_list = get_kernel_and_sigma_list(args)
@@ -72,20 +49,19 @@ def main(args):
     # device parameter
     device = "cpu"
 
-    # distribution of crowd count
-    crowd_bin = [0, 0, 0, 0]
-
     img_list = sorted(glob.glob(os.path.join(data_dir, mode + "_data", "images", "*.jpg")))
 
     sub_list = setup_sub_folders(img_list, output_dir, ndevices=args.ndevices)
 
-    kernel_list = []
     kernel_list = [create_density_kernel(kernel_size_list[index], sigma_list[index]) for index in range(len(sigma_list))]
+ 
     normalizer = [kernel.max() for kernel in kernel_list]
 
     kernel_list = [GaussianKernel(kernel, device) for kernel in kernel_list]
 
     count = 0
+    
+    
 
     for device, img_list in enumerate(sub_list):
         for file in img_list:
@@ -94,19 +70,10 @@ def main(args):
                 print(count)
             # load the images and locations
             image = Image.open(file).convert("RGB")
-            # image = np.asarray(image).astype(np.uint8)
 
             file = file.replace("images", "ground-truth").replace("IMG", "GT_IMG").replace("jpg", "mat")
+            
             locations = loadmat(file)["image_info"][0][0]["location"][0][0]
-
-            # if not (args.lower_bound <= len(locations) and len(locations) < args.upper_bound):
-            #     continue
-            # index = (len(locations)-args.lower_bound)//100
-            # if crowd_bin[index] >= 4:
-            #     continue
-            # else:
-            #     crowd_bin[index] += 1
-            # print(crowd_bin)
 
             # resize the image and rescale locations
             if image_size == -1:
@@ -141,11 +108,11 @@ def main(args):
             path = os.path.join(output_dir, f"part_{device+1}", mode)
             den_path = path.replace(os.path.basename(path), os.path.basename(path) + "_den")
 
-            try:
-                os.mkdir(path)
-                os.mkdir(den_path)
-            except FileExistsError:
-                pass
+
+            os.makedirs(path, exist_ok=True) # 创建文件夹
+            os.makedirs(den_path,exist_ok=True) # 创建文件夹
+
+
 
             for sub_index, (image, density) in enumerate(zip(images, densities)):
                 file = os.path.join(path, str(index) + "-" + str(sub_index + 1) + ".jpg")
@@ -167,11 +134,19 @@ def main(args):
                 density = pd.DataFrame(density.squeeze())
                 density.to_csv(file, header=None, index=False)
 
-    print(count)
-    print(normalizer)
-
 
 def get_kernel_and_sigma_list(args):
+    """
+    从参数中获取核大小和sigma列表。
+    
+    Args:
+        args: 命令行参数对象，其中应包含属性kernel_size和sigma，均为字符串类型，
+              以空格分隔的多个数值。
+    
+    Returns:
+        包含两个列表的元组，第一个列表为核大小的整数列表，第二个列表为sigma的浮点数列表。
+    
+    """
 
     kernel_list = [int(item) for item in args.kernel_size.split(" ")]
     sigma_list = [float(item) for item in args.sigma.split(" ")]
@@ -207,16 +182,44 @@ def get_circle_count(image, normalizer=1, threshold=0, draw=False):
 
 
 def create_dot_map(locations, image_size):
-
+    """
+    创建一个点图（dot map），用于在二维空间中表示点的分布。
+    
+    Args:
+        locations (list[tuple[float, float]]): 包含坐标点的列表，每个坐标点由两个浮点数(x, y)表示。
+        image_size (Tuple[int, int]): 点图的大小，表示为两个整数的元组(height, width)。
+    
+    Returns:
+        np.ndarray: 点图，表示为一个二维的NumPy数组，其中每个元素为浮点数，值为0.0或1.0。
+        数组的大小除最后一个维度外与`image_size`相同，最后一个维度的大小为1。
+    
+    """
+    # 创建一个全零数组，大小除最后一个维度外与image_size相同
     density = np.zeros(image_size[:-1])
+    
+    # 遍历locations中的每个坐标点
     for x, y in locations:
+        # 将坐标点转换为整数
         x, y = int(x), int(y)
+        # 在density数组的对应位置设置为1.0
         density[y, x] = 1.0
 
+    # 返回density数组
     return density
 
 
 def create_density_kernel(kernel_size, sigma):
+    """
+    根据给定的kernel_size和sigma，创建一个密度核(density kernel)
+    
+    Args:
+        kernel_size (int): 核的大小，应为正奇数
+        sigma (float): 高斯滤波器的标准差
+    
+    Returns:
+        np.ndarray: 生成的密度核，是一个二维数组，大小为(kernel_size, kernel_size)
+    
+    """
 
     kernel = np.zeros((kernel_size, kernel_size))
     mid_point = kernel_size // 2
@@ -227,7 +230,18 @@ def create_density_kernel(kernel_size, sigma):
 
 
 def resize_rescale_info(image, locations, image_size):
+    """
+    调整图像大小并重新缩放位置信息。
 
+    Args:
+        image (PIL.Image): 待调整大小的图像。
+        locations (numpy.ndarray): 图像上的位置信息。
+        image_size (int): 调整后的图像大小。
+
+    Returns:
+        tuple[numpy.ndarray, numpy.ndarray]: 调整大小后的图像和重新缩放后的位置信息。
+
+    """
     w, h = image.size
     # check if the both dimensions are larger than the image size
     if h < image_size or w < image_size:
@@ -235,38 +249,9 @@ def resize_rescale_info(image, locations, image_size):
         h, w = int(scale * h), int(scale * w)
         locations = locations * scale
 
-    # h_scale, w_scale = image_size/h, image_size/w
-    # locations[:,0] = locations[:,0]*w_scale
-    # locations[:,1] = locations[:,1]*h_scale
-    # w,h = image_size, image_size
-    # assert False
-
     image = image.resize((w, h))
 
     return np.asarray(image), locations
-
-    # def create_overlapping_crops(image, density, image_size):
-    h, w, _ = image.shape
-    h_pos = int((h - 1) // image_size) + 1
-    w_pos = int((w - 1) // image_size) + 1
-
-    end_h = h - image_size
-    end_w = w - image_size
-
-    start_h_pos = np.linspace(0, end_h, h_pos, dtype=int)
-    start_w_pos = np.linspace(0, end_w, w_pos, dtype=int)
-
-    image_crops, density_crops = [], []
-    for start_h in start_h_pos:
-        for start_w in start_w_pos:
-            end_h, end_w = start_h + image_size, start_w + image_size
-            image_crops.append(image[start_h:end_h, start_w:end_w, :])
-            density_crops.append(density[start_h:end_h, start_w:end_w])
-
-    image_crops = np.asarray(image_crops)
-    density_crops = np.asarray(density_crops)
-
-    return image_crops, density_crops
 
 
 def create_non_overlapping_crops(image, density, image_size):
@@ -328,6 +313,24 @@ def start_points(size, split_size, overlap=0):
 
 
 def arrange_crops(image, x_start, y_start, crop_size):
+    """
+    对输入图像进行裁剪并返回裁剪后的图像列表。
+    
+    Args:
+        image (numpy.ndarray): 待裁剪的图像，形状为 (H, W, C)，其中 H 为图像高度，W 为图像宽度，C 为图像通道数。
+        x_start (list[int]): 裁剪起始位置的 x 坐标列表。
+        y_start (list[int]): 裁剪起始位置的 y 坐标列表。
+        crop_size (int): 裁剪图像的大小。
+    
+    Returns:
+        numpy.ndarray: 裁剪后的图像列表，形状为 (n, crop_size, crop_size, C)，其中 n 为裁剪后图像的个数。
+    
+    Raises:
+        无。
+    
+    Note:
+        如果裁剪后的图像无法堆叠成四维数组，则打印原始图像和裁剪后图像的形状信息。
+    """
     crops = []
     for i in y_start:
         for j in x_start:
@@ -344,6 +347,18 @@ def arrange_crops(image, x_start, y_start, crop_size):
 
 
 def setup_sub_folders(img_list, output_dir, ndevices=4):
+    """
+    根据给定的图像列表和设备数量，在输出目录中创建子文件夹，并将图像分配给每个子文件夹。
+    
+    Args:
+        img_list (list): 包含图像路径的列表。
+        output_dir (str): 输出目录的路径。
+        ndevices (int, optional): 设备数量。默认为4。
+    
+    Returns:
+        list: 包含分配给每个子文件夹的图像路径的列表。
+    
+    """
     per_device = len(img_list) // ndevices
     sub_list = []
     for device in range(ndevices - 1):
@@ -352,17 +367,24 @@ def setup_sub_folders(img_list, output_dir, ndevices=4):
 
     for device in range(ndevices):
         sub_path = os.path.join(output_dir, f"part_{device+1}")
-        try:
-            os.mkdir(sub_path)
-        except FileExistsError:
-            pass
-
+        os.makedirs(sub_path, exist_ok=True)
+            
     return sub_list
 
 
 class GaussianKernel(nn.Module):
 
     def __init__(self, kernel_weights, device):
+        """
+        初始化一个卷积核，该卷积核在初始化时接收预定义的权重，并禁用梯度计算。
+        
+        Args:
+            kernel_weights (np.ndarray): 卷积核的权重，应为一个二维numpy数组。
+            device (torch.device): 权重所在的设备（如：'cpu'或'cuda'）。
+        
+        Returns:
+            None
+        """
         super().__init__()
         self.kernel = nn.Conv2d(1, 1, kernel_weights.shape, bias=False, padding=kernel_weights.shape[0] // 2)
         kernel_weights = torch.tensor(kernel_weights).unsqueeze(0).unsqueeze(0)
@@ -374,6 +396,6 @@ class GaussianKernel(nn.Module):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("Prepare image and density dataset", parents=[get_arg_parser()])
-    args = parser.parse_args()
+    args = Config("sh_scripts/preprocess_shtech.yaml").obj
     main(args)
+

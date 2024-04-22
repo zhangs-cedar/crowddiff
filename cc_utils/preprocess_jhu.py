@@ -294,7 +294,9 @@ def main(args):
                     continue
                 file = os.path.join(path, str(index) + "-" + str(sub_index + 1) + ".jpg")
                 if args.with_density:
-                    req_image = [(255 - (density[:, :, index] / normalizer[index] * 255.0)).clip(0, 255).astype(np.uint8) for index in range(len(normalizer))]
+                    req_image = [
+                        (255 - (density[:, :, index] / normalizer[index] * 255.0)).clip(0, 255).astype(np.uint8) for index in range(len(normalizer))
+                    ]
                     req_image = torch.tensor(np.asarray(req_image))
                     req_image = rearrange(req_image, "c h w -> h (c w)")
                     req_image = req_image.detach().numpy()

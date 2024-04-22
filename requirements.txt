@@ -76,8 +76,8 @@ tensorflow-estimator==2.11.0
 tensorflow-io-gcs-filesystem==0.30.0
 termcolor==2.2.0
 threadpoolctl==3.1.0
-torch==1.13.1
-torchvision==0.14.1
+# torch==1.13.1
+# torchvision==0.14.1
 tqdm==4.64.1
 typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/typing_extensions_1665144421445/work
 urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1673452138552/work

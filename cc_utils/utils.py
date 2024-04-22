@@ -72,7 +72,14 @@ class DataParameter:
         self.resample = length and cycles and error
 
         print(f"mae: {self.mae}")
-        progress = " ".join([f"name: {self.name}", f"cum mae: {np.sum(np.abs(self.mae[self.order]))}", f"comb mae: {np.abs(pred_count-np.sum(self.crowd_count))}", f"cycle:{self.cycles}"])
+        progress = " ".join(
+            [
+                f"name: {self.name}",
+                f"cum mae: {np.sum(np.abs(self.mae[self.order]))}",
+                f"comb mae: {np.abs(pred_count-np.sum(self.crowd_count))}",
+                f"cycle:{self.cycles}",
+            ]
+        )
         # print(f'name: {self.name}, cum mae: {np.sum(np.abs(self.mae[self.order]))} \
         # comb mae: {np.abs(pred_count-np.sum(self.crowd_count))} cycle:{self.cycles}')
         print(progress)
@@ -162,7 +169,9 @@ class DataParameter:
                     return image
                 image[:, i : i + self.image_size, j : j + self.image_size] = crops[count] + image[:, i : i + self.image_size, j : j + self.image_size]
 
-                mask[:, i : i + self.image_size, j : j + self.image_size] = mask[:, i : i + self.image_size, j : j + self.image_size] + th.ones((crops.shape[1], self.image_size, self.image_size))
+                mask[:, i : i + self.image_size, j : j + self.image_size] = mask[:, i : i + self.image_size, j : j + self.image_size] + th.ones(
+                    (crops.shape[1], self.image_size, self.image_size)
+                )
                 count += 1
         image = image / mask
 
